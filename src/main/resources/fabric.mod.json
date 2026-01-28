@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "sleepy-addon",
+  "version": "${version}",
+  "name": "SleepyAddon",
+  "description": "",
+  "authors": [
+    "Sleepy"
+  ],
+  "contact": {
+    "repo": "https://github.com/MeteorDevelopment/meteor-addon-template"
+  },
+  "icon": "assets/sleepy/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "sleepy.addon.SleepyAddon"
+    ]
+  },
+  "mixins": [
+    "sleepy.mixins.json"
+  ],
+  "accessWidener": "sleepy.accesswidener",
+  "custom": {
+    "meteor-client:color": "127,0,255"
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": ["${mc_version}"],
+    "meteor-client": "*"
+  }
+}
