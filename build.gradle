@@ -1,3 +1,5 @@
+import java.nio.file.Files
+
 plugins {
     id "fabric-loom" version "1.14.10"
 }
@@ -42,31 +44,74 @@ dependencies {
     modCompileOnly files("libs/malilib-fabric-1.21.4-0.23.5.jar")
 }
 
-tasks {
-    processResources {
-        def propertyMap = [
-            "version"   : project.version,
-            "mc_version": project.minecraft_version,
-        ]
-
-        filesMatching("fabric.mod.json") {
-            expand(propertyMap)
+tasks.register("syncModsDir") {
+    def modsDir = file("run-dev/mods")
+    def targetDir = file("run-dev/mods-${project.minecraft_version}")
+    inputs.property("minecraft_version", project.minecraft_version)
+    outputs.dir(modsDir)
+    doLast {
+        if (!targetDir.exists()) {
+            throw new GradleException("Missing mods folder: ${targetDir}. Create it first.")
         }
-    }
 
-    jar {
-        from("LICENSE") {
-            rename { "${it}_${project.base.archivesName.get()}" }
+        def modsPath = modsDir.toPath()
+        def targetPath = targetDir.toPath()
+        def parent = modsPath.getParent()
+        if (parent == null) {
+            throw new GradleException("Cannot determine parent directory for ${modsDir}")
         }
-    }
 
-    java {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
-    }
+        if (Files.exists(modsPath)) {
+            if (Files.isSymbolicLink(modsPath)) {
+                def existingTarget = Files.readSymbolicLink(modsPath)
+                def resolved = parent.resolve(existingTarget).normalize()
+                if (resolved == targetPath.normalize()) return
+                Files.delete(modsPath)
+            } else {
+                def currentFiles = modsDir.listFiles()?.collect { it.name }?.sort() ?: []
+                def targetFiles = targetDir.listFiles()?.collect { it.name }?.sort() ?: []
+                if (currentFiles != targetFiles) {
+                    throw new GradleException("run-dev/mods does not match ${targetDir.name}. Move or clean it before running.")
+                }
+                modsDir.deleteDir()
+            }
+        }
 
-    tasks.withType(JavaCompile).configureEach {
-        it.options.encoding = "UTF-8"
-        it.options.release = 21
+        def relativeTarget = parent.relativize(targetPath)
+        Files.createSymbolicLink(modsPath, relativeTarget)
     }
+}
+
+tasks.named("processResources") {
+    inputs.property("version", project.version)
+    inputs.property("mc_version", project.minecraft_version)
+
+    def propertyMap = [
+        "version"   : project.version,
+        "mc_version": project.minecraft_version,
+    ]
+
+    filesMatching("fabric.mod.json") {
+        expand(propertyMap)
+    }
+}
+
+tasks.named("jar") {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    it.options.release = 21
+}
+
+tasks.matching { it.name == "runClient" }.configureEach {
+    dependsOn("syncModsDir")
 }
