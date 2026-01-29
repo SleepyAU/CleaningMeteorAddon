@@ -42,7 +42,7 @@ public class Printer extends Module {
     private final Setting<Boolean> mine = sgGeneral.add(new BoolSetting.Builder()
         .name("mine")
         .description("Enable mining logic.")
-        .defaultValue(false)
+        .defaultValue(true)
         .build()
     );
 
@@ -63,7 +63,7 @@ public class Printer extends Module {
     private final Setting<MineMode> mineMode = sgGeneral.add(new EnumSetting.Builder<MineMode>()
         .name("mine-mode")
         .description("Target selection mode for mining.")
-        .defaultValue(MineMode.Closest)
+        .defaultValue(MineMode.FurthestUp)
         .build()
     );
 

@@ -20,7 +20,7 @@ public final class AntiCheat extends Module {
     public final Setting<Integer> BlockPlaceCooldown = sgGeneral.add(new IntSetting.Builder()
         .name("block-place-cooldown")
         .description("Cooldown before retrying the same BlockPos.")
-        .defaultValue(40)
+        .defaultValue(400)
         .min(10)
         .sliderMax(500)
         .build()
