@@ -68,7 +68,7 @@ public class InventoryUtil implements Util {
                 // Hotbar: select client+server, remember previous
                 if (sel != desiredSlot) {
                     s.prevSelected = sel;
-                    mc.player.getInventory().setSelectedSlot(desiredSlot);
+                    mc.player.getInventory().selectedSlot = desiredSlot;
                     mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(desiredSlot));
                 }
             } else if (desiredSlot >= 9 && desiredSlot <= 35) {
@@ -96,7 +96,7 @@ public class InventoryUtil implements Util {
                     // For now, just restore via selected slot if needed; the actual swap logic is still in your modules.
                 } else if (prevSelected != -1) {
                     if (mc.player.getInventory().selectedSlot != prevSelected) {
-                        mc.player.getInventory().setSelectedSlot(prevSelected);
+                        mc.player.getInventory().selectedSlot = prevSelected;
                         mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(prevSelected));
                     }
                 }

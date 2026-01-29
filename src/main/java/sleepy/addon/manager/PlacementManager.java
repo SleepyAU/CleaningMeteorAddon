@@ -10,7 +10,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.item.consume.UseAction;
+import net.minecraft.util.UseAction;
 import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
@@ -158,7 +158,7 @@ public final class PlacementManager {
 
         // Select the block slot if needed.
         if (slotChanged) {
-            mc.player.getInventory().setSelectedSlot(hb);
+            mc.player.getInventory().selectedSlot = hb;
             mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(hb));
         }
 
@@ -207,7 +207,7 @@ public final class PlacementManager {
 
         // Restore previous selected hotbar slot.
         if (slotChanged && mc.player.getInventory().selectedSlot != originalSlot) {
-            mc.player.getInventory().setSelectedSlot(originalSlot);
+            mc.player.getInventory().selectedSlot = originalSlot;
             mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
         }
 
@@ -215,7 +215,7 @@ public final class PlacementManager {
         if (!stacksSameItem(mc.player.getOffHandStack(), offhandSnapshot)) {
             sendOffhandSwap();
             if (slotChanged && mc.player.getInventory().selectedSlot != originalSlot) {
-                mc.player.getInventory().setSelectedSlot(originalSlot);
+                mc.player.getInventory().selectedSlot = originalSlot;
                 mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
             }
         }
@@ -426,7 +426,7 @@ public final class PlacementManager {
         boolean slotChanged = slot != -1 && originalSlot != slot;
 
         if (slotChanged) {
-            mc.player.getInventory().setSelectedSlot(slot);
+            mc.player.getInventory().selectedSlot = slot;
             mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
         }
 
@@ -454,14 +454,14 @@ public final class PlacementManager {
         if (swapped) sendOffhandSwap();
 
         if (slotChanged && mc.player.getInventory().selectedSlot != originalSlot) {
-            mc.player.getInventory().setSelectedSlot(originalSlot);
+            mc.player.getInventory().selectedSlot = originalSlot;
             mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
         }
 
         if (swapped && !stacksSameItem(mc.player.getOffHandStack(), offhandSnapshot)) {
             sendOffhandSwap();
             if (slotChanged && mc.player.getInventory().selectedSlot != originalSlot) {
-                mc.player.getInventory().setSelectedSlot(originalSlot);
+                mc.player.getInventory().selectedSlot = originalSlot;
                 mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
             }
         }

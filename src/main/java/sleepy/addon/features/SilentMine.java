@@ -438,7 +438,7 @@ public class SilentMine extends Module {
         }
 
         if (mc.player.isSubmergedIn(FluidTags.WATER)) {
-            speed *= mc.player.getAttributeValue(EntityAttributes.SUBMERGED_MINING_SPEED);
+            speed *= mc.player.getAttributeValue(EntityAttributes.PLAYER_SUBMERGED_MINING_SPEED);
         }
 
         if (!mc.player.isOnGround()) {
