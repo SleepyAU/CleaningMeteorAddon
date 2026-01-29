@@ -164,7 +164,7 @@ public class SilentMine extends Module {
 
                 if (delayedDestroyBlock.isReady(false) && !mc.player.isUsingItem()) {
                     if (autoSwitch.get() && slot.found()
-                        && mc.player.getInventory().selectedSlot != slot.slot()) {
+                        && mc.player.getInventory().getSelectedSlot() != slot.slot()) {
                         InvUtils.swap(slot.slot(), true);
                         needSwapBack = true;
                     }
@@ -175,7 +175,7 @@ public class SilentMine extends Module {
                 }
 
                 if (delayedDestroyBlock.isReady(false)) {
-                    if (!slot.found() || mc.player.getInventory().selectedSlot == slot.slot()) {
+                    if (!slot.found() || mc.player.getInventory().getSelectedSlot() == slot.slot()) {
                         delayedDestroyBlock.ticksHeldPickaxe++;
                     }
                 }
@@ -191,7 +191,7 @@ public class SilentMine extends Module {
                 if (rebreakBlock.isReady(true) && !mc.player.isUsingItem()) {
                     if (inBreakRange(rebreakBlock.blockPos)) {
                         if (autoSwitch.get() && slot.found()
-                            && mc.player.getInventory().selectedSlot != slot.slot()
+                            && mc.player.getInventory().getSelectedSlot() != slot.slot()
                             && !needSwapBack) {
                             InvUtils.swap(slot.slot(), true);
                             needSwapBack = true;
@@ -235,7 +235,7 @@ public class SilentMine extends Module {
                     FindItemResult slot = InvUtils.findFastestTool(blockState);
 
                     if (autoSwitch.get() && slot.found()
-                        && mc.player.getInventory().selectedSlot != slot.slot()
+                        && mc.player.getInventory().getSelectedSlot() != slot.slot()
                         && !needSwapBack) {
                         InvUtils.swap(slot.slot(), true);
                     }
@@ -414,7 +414,7 @@ public class SilentMine extends Module {
     }
 
     private double getBlockBreakingSpeed(int slot, BlockState block) {
-        double speed = mc.player.getInventory().main.get(slot).getMiningSpeedMultiplier(block);
+        double speed = mc.player.getInventory().getMainStacks().get(slot).getMiningSpeedMultiplier(block);
 
         if (speed > 1) {
             ItemStack tool = mc.player.getInventory().getStack(slot);
@@ -550,7 +550,7 @@ public class SilentMine extends Module {
             BlockState state = mc.world.getBlockState(blockPos);
             FindItemResult slot = InvUtils.findFastestTool(state);
 
-            int toolSlot = slot.found() ? slot.slot() : mc.player.getInventory().selectedSlot;
+            int toolSlot = slot.found() ? slot.slot() : mc.player.getInventory().getSelectedSlot();
             double breakingSpeed = getBlockBreakingSpeed(toolSlot, state);
 
             return Math.min(

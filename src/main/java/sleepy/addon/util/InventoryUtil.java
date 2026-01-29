@@ -60,7 +60,7 @@ public class InventoryUtil implements Util {
             SwapSession existing = CURRENT.get();
             if (existing != null && existing.active) return existing;
 
-            int sel = mc.player.getInventory().selectedSlot;
+            int sel = mc.player.getInventory().getSelectedSlot();
             SwapSession s = new SwapSession();
             s.ownedByCaller = true;
 
@@ -95,7 +95,7 @@ public class InventoryUtil implements Util {
                     // TODO: if you later add the SWAP_ITEM_WITH_OFFHAND offhand swapping here, mirror Syntaxia logic.
                     // For now, just restore via selected slot if needed; the actual swap logic is still in your modules.
                 } else if (prevSelected != -1) {
-                    if (mc.player.getInventory().selectedSlot != prevSelected) {
+                    if (mc.player.getInventory().getSelectedSlot() != prevSelected) {
                         mc.player.getInventory().setSelectedSlot(prevSelected);
                         mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(prevSelected));
                     }
@@ -203,7 +203,7 @@ public class InventoryUtil implements Util {
     /** Current client-selected hotbar index (0..8). */
     public static int clientHotbarIndex() {
         if (mc.player == null) return -1;
-        return mc.player.getInventory().selectedSlot;
+        return mc.player.getInventory().getSelectedSlot();
     }
 
     /**
@@ -232,7 +232,7 @@ public class InventoryUtil implements Util {
                     SlotActionType.PICKUP, mc.player
                 );
                 mc.interactionManager.clickSlot(
-                    mc.player.currentScreenHandler.syncId, 36 + mc.player.getInventory().selectedSlot, 0,
+                    mc.player.currentScreenHandler.syncId, 36 + mc.player.getInventory().getSelectedSlot(), 0,
                     SlotActionType.PICKUP, mc.player
                 );
                 mc.interactionManager.clickSlot(

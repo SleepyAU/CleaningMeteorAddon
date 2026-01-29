@@ -152,7 +152,7 @@ public final class PlacementManager {
         if (tick == lastPlaceTick) return List.of();
 
         // Snapshot selection/offhand
-        int originalSlot = mc.player.getInventory().selectedSlot;
+        int originalSlot = mc.player.getInventory().getSelectedSlot();
         ItemStack offhandSnapshot = mc.player.getOffHandStack().copy();
         boolean slotChanged = originalSlot != hb;
 
@@ -206,7 +206,7 @@ public final class PlacementManager {
         sendOffhandSwap();
 
         // Restore previous selected hotbar slot.
-        if (slotChanged && mc.player.getInventory().selectedSlot != originalSlot) {
+        if (slotChanged && mc.player.getInventory().getSelectedSlot() != originalSlot) {
             mc.player.getInventory().setSelectedSlot(originalSlot);
             mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
         }
@@ -214,7 +214,7 @@ public final class PlacementManager {
         // If the offhand snapshot wasn't restored, attempt one more swap to heal.
         if (!stacksSameItem(mc.player.getOffHandStack(), offhandSnapshot)) {
             sendOffhandSwap();
-            if (slotChanged && mc.player.getInventory().selectedSlot != originalSlot) {
+            if (slotChanged && mc.player.getInventory().getSelectedSlot() != originalSlot) {
                 mc.player.getInventory().setSelectedSlot(originalSlot);
                 mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
             }
@@ -403,7 +403,7 @@ public final class PlacementManager {
         if (off.isOf(item)) {
             useHand = Hand.OFF_HAND;
         } else if (main.isOf(item)) {
-            slot = mc.player.getInventory().selectedSlot;
+            slot = mc.player.getInventory().getSelectedSlot();
             useHand = Hand.OFF_HAND; // we'll swap to offhand
         } else {
             for (int i = 0; i < 9; i++) {
@@ -421,7 +421,7 @@ public final class PlacementManager {
         if (allowed == 0) return List.of();
 
         // Snapshot selection/offhand similar to placeMany
-        int originalSlot = mc.player.getInventory().selectedSlot;
+        int originalSlot = mc.player.getInventory().getSelectedSlot();
         ItemStack offhandSnapshot = mc.player.getOffHandStack().copy();
         boolean slotChanged = slot != -1 && originalSlot != slot;
 
@@ -453,14 +453,14 @@ public final class PlacementManager {
 
         if (swapped) sendOffhandSwap();
 
-        if (slotChanged && mc.player.getInventory().selectedSlot != originalSlot) {
+        if (slotChanged && mc.player.getInventory().getSelectedSlot() != originalSlot) {
             mc.player.getInventory().setSelectedSlot(originalSlot);
             mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
         }
 
         if (swapped && !stacksSameItem(mc.player.getOffHandStack(), offhandSnapshot)) {
             sendOffhandSwap();
-            if (slotChanged && mc.player.getInventory().selectedSlot != originalSlot) {
+            if (slotChanged && mc.player.getInventory().getSelectedSlot() != originalSlot) {
                 mc.player.getInventory().setSelectedSlot(originalSlot);
                 mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(originalSlot));
             }
