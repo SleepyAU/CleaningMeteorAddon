@@ -19,6 +19,12 @@ A Meteor Client **cleaning & utility** addon.
 - **SilentMine**  
   A packet/silent mining module for **2b2t**, designed to make mining smoother, and includes support for the **Grim AntiCheat double-mine exploit**.
 
+## Dependencies
+
+- [Meteor Client](https://meteorclient.com/archive)
+- [Litematica](https://modrinth.com/mod/litematica/versions)
+- [MaLiLib](https://modrinth.com/mod/malilib/versions)
+
 ## Credits
 
 - **SleepyFemboy** — I made this
