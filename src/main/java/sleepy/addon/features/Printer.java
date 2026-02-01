@@ -60,10 +60,17 @@ public class Printer extends Module {
         .build()
     );
 
-    private final Setting<MineMode> mineMode = sgGeneral.add(new EnumSetting.Builder<MineMode>()
-        .name("mine-mode")
-        .description("Target selection mode for mining.")
-        .defaultValue(MineMode.FurthestUp)
+    private final Setting<TargetMode> targetMode = sgGeneral.add(new EnumSetting.Builder<TargetMode>()
+        .name("target-mode")
+        .description("Target selection mode for mining and placing.")
+        .defaultValue(TargetMode.FurthestUp)
+        .build()
+    );
+
+    private final Setting<PlaceSelection> placeSelection = sgGeneral.add(new EnumSetting.Builder<PlaceSelection>()
+        .name("place-selection")
+        .description("Restricts placements to below or above your feet.")
+        .defaultValue(PlaceSelection.All)
         .build()
     );
 
@@ -95,7 +102,7 @@ public class Printer extends Module {
         if (placement == null || schematicWorld == null) return;
 
         if (place.get()) {
-            BlockPos target = findClosestPlacement(schematicWorld);
+            BlockPos target = findPlacementTarget(schematicWorld, targetMode.get(), placeSelection.get());
             if (target != null) {
                 BlockState targetState = schematicWorld.getBlockState(target);
                 if (targetState != null && !targetState.isAir() && findSlotForBlock(targetState) != -1) {
@@ -108,7 +115,7 @@ public class Printer extends Module {
             if (!mineWrong.get() && !mineExtra.get()) return;
             if (silentMine != null && silentMine.isActive()) {
                 if (!silentMine.hasRebreakBlock()) {
-                    BlockPos mineTarget = findMineTarget(placement, schematicWorld, mineMode.get(), silentMine);
+                    BlockPos mineTarget = findMineTarget(placement, schematicWorld, targetMode.get(), silentMine);
                     if (mineTarget != null) {
                         silentMine.silentBreakBlock(mineTarget, 100.0);
                     }
@@ -117,11 +124,12 @@ public class Printer extends Module {
         }
     }
 
-    private BlockPos findClosestPlacement(WorldSchematic schematicWorld) {
+    private BlockPos findPlacementTarget(WorldSchematic schematicWorld, TargetMode mode, PlaceSelection selection) {
         if (mc.player == null || mc.world == null) return null;
 
         Vec3d eye = mc.player.getEyePos();
-        double bestDist = Double.POSITIVE_INFINITY;
+        double bestDist = (mode == TargetMode.Closest) ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+        int bestY = Integer.MIN_VALUE;
         BlockPos best = null;
 
         int r = (int) Math.ceil(MAX_RANGE);
@@ -134,6 +142,7 @@ public class Printer extends Module {
                 for (int dz = -r; dz <= r; dz++) {
                     scanPos.set(baseX + dx, baseY + dy, baseZ + dz);
                     if (!withinRange(scanPos, eye)) continue;
+                    if (!matchesPlaceSelection(selection, baseY, scanPos.getY())) continue;
 
                     BlockState schematicState = schematicWorld.getBlockState(scanPos);
                     if (schematicState == null || schematicState.isAir()) continue;
@@ -144,9 +153,24 @@ public class Printer extends Module {
                     if (PlacementManager.get().isOnCooldown(scanPos)) continue;
 
                     double dist = new Box(scanPos).squaredMagnitude(eye);
-                    if (dist < bestDist) {
-                        bestDist = dist;
-                        best = scanPos.toImmutable();
+                    int y = scanPos.getY();
+
+                    if (mode == TargetMode.Closest) {
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            best = scanPos.toImmutable();
+                        }
+                    } else if (mode == TargetMode.Furthest) {
+                        if (dist > bestDist) {
+                            bestDist = dist;
+                            best = scanPos.toImmutable();
+                        }
+                    } else if (mode == TargetMode.FurthestUp) {
+                        if (y > bestY || (y == bestY && dist > bestDist)) {
+                            bestDist = dist;
+                            bestY = y;
+                            best = scanPos.toImmutable();
+                        }
                     }
                 }
             }
@@ -155,12 +179,12 @@ public class Printer extends Module {
         return best;
     }
 
-    private BlockPos findMineTarget(SchematicPlacement placement, WorldSchematic schematicWorld, MineMode mode, SilentMine silentMine) {
+    private BlockPos findMineTarget(SchematicPlacement placement, WorldSchematic schematicWorld, TargetMode mode, SilentMine silentMine) {
         if (mc.player == null || mc.world == null || schematicWorld == null) return null;
 
         Vec3d eye = mc.player.getEyePos();
         BlockPos best = null;
-        double bestDist = (mode == MineMode.Closest) ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+        double bestDist = (mode == TargetMode.Closest) ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
         int bestY = Integer.MIN_VALUE;
 
         int r = (int) Math.ceil(MINE_RANGE);
@@ -189,17 +213,17 @@ public class Printer extends Module {
                     double dist = RangeUtil.distanceSqToBox(eye, new Box(scanPos));
                     int y = scanPos.getY();
 
-                    if (mode == MineMode.Closest) {
+                    if (mode == TargetMode.Closest) {
                         if (dist < bestDist) {
                             bestDist = dist;
                             best = scanPos.toImmutable();
                         }
-                    } else if (mode == MineMode.Furthest) {
+                    } else if (mode == TargetMode.Furthest) {
                         if (dist > bestDist) {
                             bestDist = dist;
                             best = scanPos.toImmutable();
                         }
-                    } else if (mode == MineMode.FurthestUp) {
+                    } else if (mode == TargetMode.FurthestUp) {
                         if (y > bestY || (y == bestY && dist > bestDist)) {
                             bestDist = dist;
                             bestY = y;
@@ -232,6 +256,12 @@ public class Printer extends Module {
         return new Box(pos).squaredMagnitude(eye) <= maxSq;
     }
 
+    private boolean matchesPlaceSelection(PlaceSelection selection, int playerY, int posY) {
+        if (selection == PlaceSelection.Below) return posY < playerY;
+        if (selection == PlaceSelection.Above) return posY >= playerY;
+        return true;
+    }
+
     private int findSlotForBlock(BlockState state) {
         if (mc.player == null || state == null) return -1;
         for (int i = 0; i < 9; i++) {
@@ -241,9 +271,15 @@ public class Printer extends Module {
         return -1;
     }
 
-    private enum MineMode {
+    private enum TargetMode {
         Closest,
         Furthest,
         FurthestUp
+    }
+
+    private enum PlaceSelection {
+        All,
+        Below,
+        Above
     }
 }
