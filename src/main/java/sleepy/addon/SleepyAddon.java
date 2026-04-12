@@ -6,6 +6,7 @@ import sleepy.addon.features.AntiCheat;
 import sleepy.addon.features.Airplace;
 import sleepy.addon.features.Printer;
 import sleepy.addon.features.SilentMine;
+import sleepy.addon.features.WorldEater;
 import sleepy.addon.commands.TestPlaceCommand;
 import com.mojang.logging.LogUtils;
 import meteordevelopment.meteorclient.MeteorClient;
@@ -32,6 +33,7 @@ public class SleepyAddon extends MeteorAddon {
         Modules.get().add(new Airplace());
         Modules.get().add(new Printer());
         Modules.get().add(new SilentMine());
+        Modules.get().add(new WorldEater());
         Modules.get().add(new AntiCheat());
         Modules.get().get(AntiCheat.class).toggle();
 
