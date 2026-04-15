@@ -126,6 +126,7 @@ public class SilentMine extends Module {
     private double currentGameTickCalculated = 0;
     private boolean needSwapBack = false;
     private boolean allowRebreakLoop = true;
+    private boolean suppressAntiRubberbandAbort;
 
     public SilentMine() {
         super(SleepyAddon.CATEGORY, "silent-mine", "Allows you to mine blocks without holding a pickaxe.");
@@ -258,7 +259,15 @@ public class SilentMine extends Module {
         silentBreakBlock(pos, Direction.UP, priority);
     }
 
+    public void silentBreakBlockQuiet(BlockPos pos, double priority) {
+        silentBreakBlock(pos, Direction.UP, priority, true);
+    }
+
     public void silentBreakBlock(BlockPos blockPos, Direction direction, double priority) {
+        silentBreakBlock(blockPos, direction, priority, false);
+    }
+
+    private void silentBreakBlock(BlockPos blockPos, Direction direction, double priority, boolean quietPackets) {
         if (!isActive()) return;
         if (blockPos == null || alreadyBreaking(blockPos)) return;
         if (!BlockUtils.canBreak(blockPos, mc.world.getBlockState(blockPos))) return;
@@ -272,7 +281,7 @@ public class SilentMine extends Module {
             }
 
             currentGameTickCalculated -= 0.1;
-            delayedDestroyBlock = new SilentMineBlock(blockPos, direction, priority);
+            delayedDestroyBlock = new SilentMineBlock(blockPos, direction, priority, quietPackets);
 
             delayedDestroyBlock.startBreaking(true);
 
@@ -291,7 +300,7 @@ public class SilentMine extends Module {
         }
 
         if (rebreakBlock == null) {
-            rebreakBlock = new SilentMineBlock(blockPos, direction, priority);
+            rebreakBlock = new SilentMineBlock(blockPos, direction, priority, quietPackets);
             rebreakBlock.startBreaking(false);
         }
     }
@@ -390,6 +399,7 @@ public class SilentMine extends Module {
         if (event.packet instanceof PlayerActionC2SPacket packet
             && packet.getAction() == PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK
             && antiRubberband.get()
+            && !suppressAntiRubberbandAbort
             && (packet.getPos().equals(getRebreakBlockPos())
                 || packet.getPos().equals(getDelayedDestroyBlockPos()))) {
             mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
@@ -455,13 +465,19 @@ public class SilentMine extends Module {
         public int timesSendBreakPacket = 0;
         public int ticksHeldPickaxe = 0;
         public boolean beenAir = false;
+        private final boolean quietPackets;
         private double destroyProgressStart = 0;
         private double priority = 0;
 
         public SilentMineBlock(BlockPos blockPos, Direction direction, double priority) {
+            this(blockPos, direction, priority, false);
+        }
+
+        public SilentMineBlock(BlockPos blockPos, Direction direction, double priority, boolean quietPackets) {
             this.blockPos = blockPos;
             this.direction = direction;
             this.priority = priority;
+            this.quietPackets = quietPackets;
         }
 
         public boolean isReady(boolean isRebreak) {
@@ -479,6 +495,12 @@ public class SilentMine extends Module {
 
             if (isDelayedDestroy && canRebreakRebreakBlock()) {
                 rebreakBlock = null;
+            }
+
+            if (quietPackets) {
+                sendQuietBreakPulse();
+                started = true;
+                return;
             }
 
             mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
@@ -519,6 +541,12 @@ public class SilentMine extends Module {
         }
 
         public void tryBreak() {
+            if (quietPackets) {
+                sendQuietStop();
+                timesSendBreakPacket++;
+                return;
+            }
+
             mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
                 PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, blockPos, direction, getSeq()
             ));
@@ -534,6 +562,32 @@ public class SilentMine extends Module {
             }
 
             timesSendBreakPacket++;
+        }
+
+        private void sendQuietBreakPulse() {
+            suppressAntiRubberbandAbort = true;
+            try {
+                mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
+                    PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, blockPos, direction, getSeq()
+                ));
+
+                mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
+                    PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, blockPos, direction, getSeq()
+                ));
+            } finally {
+                suppressAntiRubberbandAbort = false;
+            }
+        }
+
+        private void sendQuietStop() {
+            suppressAntiRubberbandAbort = true;
+            try {
+                mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
+                    PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, blockPos, direction, getSeq()
+                ));
+            } finally {
+                suppressAntiRubberbandAbort = false;
+            }
         }
 
         public void cancelBreaking() {
