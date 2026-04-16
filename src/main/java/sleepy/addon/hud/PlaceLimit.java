@@ -8,7 +8,7 @@ import sleepy.addon.SleepyAddon;
 import sleepy.addon.manager.PlacementManager;
 
 public class PlaceLimit extends HudElement {
-    public static final HudElementInfo<PlaceLimit> INFO = new HudElementInfo<>(SleepyAddon.HUD_GROUP, "place-limit", "Shows placements in the last second.", PlaceLimit::new);
+    public static final HudElementInfo<PlaceLimit> INFO = new HudElementInfo<>(SleepyAddon.HUD_GROUP, "place-limit", "Shows block-interact packet usage.", PlaceLimit::new);
 
     public PlaceLimit() {
         super(INFO);
@@ -16,8 +16,11 @@ public class PlaceLimit extends HudElement {
 
     @Override
     public void render(HudRenderer renderer) {
-        int used = PlacementManager.get().getPlacedLastSecond();
-        String text = "PlaceLimit " + used + "/20";
+        PlacementManager placementManager = PlacementManager.get();
+        int used = placementManager.getUsedQuota();
+        int lastSecond = placementManager.getPlacedLastSecond();
+        String text = "PlaceLimit " + used + "/" + PlacementManager.BLOCK_INTERACT_LIMIT
+            + " 300ms " + lastSecond + "/s";
         setSize(renderer.textWidth(text, true), renderer.textHeight(true));
 
         renderer.text(text, x, y, Color.WHITE, true);
