@@ -3,7 +3,8 @@
   "package": "sleepy.addon.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "MixinClientPlayerEntity"
+    "MixinClientPlayerEntity",
+    "MixinClientConnection"
   ],
   "injectors": {
     "defaultRequire": 1

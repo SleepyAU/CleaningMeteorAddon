@@ -23,21 +23,27 @@ import net.minecraft.util.math.Vec3d;
 import sleepy.addon.features.AntiCheat;
 import sleepy.addon.util.RangeUtil;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Central placement manager (blocks and item air-interacts).
- * One-tick burst: select hotbar slot once → OFF_HAND swap → N air-interacts (fresh seq each) → swap back → restore slot.
+ * Burst placement: select hotbar slot once → OFF_HAND swap → N air-interacts → swap back → restore slot.
  * Rate-limited by the shared action limiter (default 9 per 300 ms).
  * Hotbar-only (no container swaps).
  */
 public final class PlacementManager {
+    public static final int BLOCK_INTERACT_LIMIT = 9;
+    public static final int BLOCK_INTERACT_WINDOW_MS = 300;
+    public static final int APPROX_BLOCK_INTERACTS_PER_SECOND = BLOCK_INTERACT_LIMIT * 1000 / BLOCK_INTERACT_WINDOW_MS;
+    private static final int HUD_SECOND_WINDOW_MS = 1000;
+
     public enum PlacementDenyReason {
         NONE,
         INVALID_INPUT,
@@ -66,27 +72,50 @@ public final class PlacementManager {
     public static PlacementManager get() { return INSTANCE; }
 
     private final MinecraftClient mc = MinecraftClient.getInstance();
-    private final int[] placedPerTick = new int[20];
-    private long lastCountTick = -1L;
-    private long lastPlaceTick = -1L;
+    private final Deque<Long> blockInteractPackets = new ArrayDeque<>();
 
-    /* ── Placement rate proxy (hard limited to 1 placement per tick) ───────────────────────── */
+    /* ── Block-interact packet limiter: 9 packets per rolling 300 ms window ───────────────── */
     public void configureRate(int maxPerWindow, int windowMs) {
-        // No-op: hard limited to 1 placement per client tick.
+        // Fixed by design: 9 block-interact packets per 300 ms.
     }
 
     /** Remaining action tokens in the current window. */
     public int getRemainingQuota() {
-        if (mc.player == null) return 0;
-        return mc.player.age == lastPlaceTick ? 0 : 1;
+        long now = System.currentTimeMillis();
+        synchronized (blockInteractPackets) {
+            pruneOldPacketsLocked(now);
+            return Math.max(0, BLOCK_INTERACT_LIMIT - countPacketsSinceLocked(now, BLOCK_INTERACT_WINDOW_MS));
+        }
+    }
+
+    public int getUsedQuota() {
+        long now = System.currentTimeMillis();
+        synchronized (blockInteractPackets) {
+            pruneOldPacketsLocked(now);
+            return countPacketsSinceLocked(now, BLOCK_INTERACT_WINDOW_MS);
+        }
     }
 
     public int getPlacedLastSecond() {
-        if (mc.player == null) return 0;
-        syncPlacementWindow(mc.player.age);
-        int sum = 0;
-        for (int v : placedPerTick) sum += v;
-        return sum;
+        long now = System.currentTimeMillis();
+        synchronized (blockInteractPackets) {
+            pruneOldPacketsLocked(now);
+            return countPacketsSinceLocked(now, HUD_SECOND_WINDOW_MS);
+        }
+    }
+
+    public boolean canSendBlockInteractPacket() {
+        return getRemainingQuota() > 0;
+    }
+
+    public boolean tryConsumeBlockInteractPacket() {
+        long now = System.currentTimeMillis();
+        synchronized (blockInteractPackets) {
+            pruneOldPacketsLocked(now);
+            if (countPacketsSinceLocked(now, BLOCK_INTERACT_WINDOW_MS) >= BLOCK_INTERACT_LIMIT) return false;
+            blockInteractPackets.addLast(now);
+            return true;
+        }
     }
 
     /* ── Per-position cooldown (configurable; NOT cleared by block updates) ── */
@@ -123,10 +152,10 @@ public final class PlacementManager {
     }
 
 
-    /* ── One-tick multi-place API (air place only; OFF_HAND) ──────────────── */
+    /* ── Multi-place API (air place only; OFF_HAND) ──────────────────────── */
 
     /**
-     * Places up to the current quota positions this tick in ONE OFF_HAND burst.
+     * Places up to the current rolling-window quota in one OFF_HAND burst.
      * Hotbar-only: the block must be present in 0..8.
      * Internal safety:
      * - hard caps place range to PLACE_RANGE (eye-pos → block AABB, squared)
@@ -148,8 +177,8 @@ public final class PlacementManager {
         if (allowed == 0) return List.of();
         if (shouldStopForEating()) return List.of();
 
-        long tick = mc.player.age;
-        if (tick == lastPlaceTick) return List.of();
+        List<BlockPos> candidates = collectPlaceablePositions(positions, block, allowed);
+        if (candidates.isEmpty()) return List.of();
 
         // Snapshot selection/offhand
         int originalSlot = mc.player.getInventory().selectedSlot;
@@ -165,41 +194,19 @@ public final class PlacementManager {
         // Swap mainhand <-> offhand once at burst start.
         sendOffhandSwap();
 
-        int placedCount = 0;
-        List<BlockPos> placed = new ArrayList<>(Math.min(positions.size(), allowed));
-        final int cooldownMs = perPosCooldownMs();
+        List<BlockPos> placed = new ArrayList<>(Math.min(candidates.size(), allowed));
 
-        for (BlockPos raw : positions) {
-            if (placedCount >= allowed) break;
-            if (raw == null) continue;
-
-            BlockPos pos = raw.toImmutable();
-
-            // Global place-range cap (distance^2 from eye to block AABB)
-            if (!inPlaceRange(pos)) continue;
-
-            long now = System.currentTimeMillis();
-
-            // Per-position cooldown gate
-            Long last = posCooldown.get(pos);
-            if (last != null && (now - last) < cooldownMs) continue;
-
-            // Check world state, replaceable, entity occupancy & canPlace
-            if (!basicPlaceableCheck(pos, block)) continue;
-
+        for (BlockPos pos : candidates) {
+            if (getRemainingQuota() <= 0) break;
             // For offhand airplace, match Syntaxia semantics: UP face, hit at center.
             Direction face = Direction.UP;
             BlockHitResult bhr = new BlockHitResult(Vec3d.ofCenter(pos), face, pos, false);
 
-            sendSequencedInteract(Hand.OFF_HAND, bhr);
+            if (!sendSequencedInteract(Hand.OFF_HAND, bhr)) break;
 
-            posCooldown.put(pos, now);
+            posCooldown.put(pos, System.currentTimeMillis());
 
             placed.add(pos);
-            placedCount++;
-            lastPlaceTick = tick;
-            recordPlacementTick(tick);
-            break;
         }
 
         // Swap back to restore offhand/mainhand.
@@ -274,6 +281,29 @@ public final class PlacementManager {
         return checkPlacement(pos, block).placeable();
     }
 
+    private List<BlockPos> collectPlaceablePositions(List<BlockPos> positions, Block block, int limit) {
+        if (positions == null || positions.isEmpty() || block == null || limit <= 0) return List.of();
+
+        List<BlockPos> candidates = new ArrayList<>(Math.min(positions.size(), limit));
+        final int cooldownMs = perPosCooldownMs();
+        long now = System.currentTimeMillis();
+
+        for (BlockPos raw : positions) {
+            if (candidates.size() >= limit) break;
+            if (raw == null) continue;
+
+            BlockPos pos = raw.toImmutable();
+
+            Long last = posCooldown.get(pos);
+            if (last != null && (now - last) < cooldownMs) continue;
+            if (!basicPlaceableCheck(pos, block)) continue;
+
+            candidates.add(pos);
+        }
+
+        return candidates;
+    }
+
     /** Hard range check: distance^2 from player eye position to the target block's AABB. */
     private boolean inPlaceRange(BlockPos pos) {
         if (mc.player == null || pos == null) return false;
@@ -320,9 +350,11 @@ public final class PlacementManager {
             PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
     }
 
-    private void sendSequencedInteract(Hand hand, BlockHitResult bhr) {
-        if (mc.getNetworkHandler() == null || hand == null) return;
+    private boolean sendSequencedInteract(Hand hand, BlockHitResult bhr) {
+        if (mc.getNetworkHandler() == null || hand == null) return false;
+        if (!canSendBlockInteractPacket()) return false;
         mc.getNetworkHandler().sendPacket(new PlayerInteractBlockC2SPacket(hand, bhr, 0));
+        return true;
     }
 
     /* ── Hit face helper (kept for possible non-airplace use) ─────────────── */
@@ -438,17 +470,15 @@ public final class PlacementManager {
 
         List<BlockPos> sent = new ArrayList<>(Math.min(positions.size(), allowed));
         for (BlockPos raw : positions) {
-            if (sent.size() >= allowed) break;
+            if (sent.size() >= allowed || getRemainingQuota() <= 0) break;
             if (raw == null) continue;
 
             BlockPos pos = raw.toImmutable();
             if (!inPlaceRange(pos)) continue;
 
             BlockHitResult bhr = new BlockHitResult(Vec3d.ofCenter(pos), Direction.UP, pos, false);
-            sendSequencedInteract(useHand, bhr);
+            if (!sendSequencedInteract(useHand, bhr)) break;
             sent.add(pos);
-            lastPlaceTick = mc.player.age;
-            break;
         }
 
         if (swapped) sendOffhandSwap();
@@ -469,26 +499,19 @@ public final class PlacementManager {
         return sent;
     }
 
-    private void recordPlacementTick(long tick) {
-        syncPlacementWindow(tick);
-        placedPerTick[(int) (tick % placedPerTick.length)]++;
+    private void pruneOldPacketsLocked(long now) {
+        long cutoff = now - HUD_SECOND_WINDOW_MS;
+        while (!blockInteractPackets.isEmpty() && blockInteractPackets.peekFirst() <= cutoff) {
+            blockInteractPackets.removeFirst();
+        }
     }
 
-    private void syncPlacementWindow(long tick) {
-        if (lastCountTick == -1L) {
-            Arrays.fill(placedPerTick, 0);
-            lastCountTick = tick;
-            return;
+    private int countPacketsSinceLocked(long now, int windowMs) {
+        long cutoff = now - windowMs;
+        int count = 0;
+        for (long packetTime : blockInteractPackets) {
+            if (packetTime > cutoff) count++;
         }
-        if (tick <= lastCountTick) return;
-        long diff = tick - lastCountTick;
-        if (diff >= placedPerTick.length) {
-            Arrays.fill(placedPerTick, 0);
-        } else {
-            for (long i = 1; i <= diff; i++) {
-                placedPerTick[(int) ((lastCountTick + i) % placedPerTick.length)] = 0;
-            }
-        }
-        lastCountTick = tick;
+        return count;
     }
 }
