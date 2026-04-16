@@ -17,7 +17,7 @@
     - Fill Baritone selections
     - Automatically mine **wrong** and **extra** blocks
     - Use SilentMine for blocked paths and cleanup
-=
+
 
   - **SilentMine**
     A packet/silent mining module for **2b2t**, designed to make mining smoother, and includes support for **Grim AntiCheat double-mine behavior** and Printer mining integration.
