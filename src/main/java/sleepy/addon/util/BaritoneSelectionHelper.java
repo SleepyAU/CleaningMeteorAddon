@@ -144,6 +144,10 @@ public final class BaritoneSelectionHelper {
     }
 
     public static boolean suppressBuilderActions() {
+        return suppressBuilderActions(false);
+    }
+
+    public static boolean suppressBuilderActions(boolean allowBreak) {
         if (!isBaritonePresent()) return false;
 
         try {
@@ -154,7 +158,7 @@ public final class BaritoneSelectionHelper {
                 actionsSuppressed = true;
             }
 
-            setSettingValue("allowBreak", Boolean.FALSE);
+            setSettingValue("allowBreak", allowBreak);
             setSettingValue("allowPlace", Boolean.FALSE);
             pauseBuilderProcess();
             releaseClickInputs();
@@ -169,7 +173,11 @@ public final class BaritoneSelectionHelper {
     }
 
     public static void enforcePathingOnly() {
-        suppressBuilderActions();
+        enforcePathingOnly(false);
+    }
+
+    public static void enforcePathingOnly(boolean allowBreak) {
+        suppressBuilderActions(allowBreak);
         pauseBuilderProcess();
         releaseClickInputs();
     }

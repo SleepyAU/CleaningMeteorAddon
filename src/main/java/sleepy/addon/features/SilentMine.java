@@ -213,7 +213,11 @@ public class SilentMine extends Module {
 
         if (hasDelayedDestroy() && delayedDestroyBlock.ticksHeldPickaxe > 15) {
             if (inBreakRange(delayedDestroyBlock.blockPos)) {
-                delayedDestroyBlock.startBreaking(true);
+                if (delayedDestroyBlock.quietPackets) {
+                    delayedDestroyBlock.tryBreak();
+                } else {
+                    delayedDestroyBlock.startBreaking(true);
+                }
             } else {
                 delayedDestroyBlock.cancelBreaking();
                 delayedDestroyBlock = null;
