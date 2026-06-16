@@ -144,6 +144,10 @@ public final class PlacementManager {
         return (System.currentTimeMillis() - last) < perPosCooldownMs();
     }
 
+    public void markCooldownFor(BlockPos pos) {
+        if (pos != null) posCooldown.put(pos.toImmutable(), System.currentTimeMillis());
+    }
+
     private int perPosCooldownMs() {
         AntiCheat ac = AntiCheat.get();
         if (ac == null || ac.BlockPlaceCooldown == null) return 40;
@@ -422,8 +426,18 @@ public final class PlacementManager {
      * Respects action limit and place range; performs the same offhand-swap flow as placeMany.
      */
     public List<BlockPos> airInteractMany(List<BlockPos> positions, Item item) {
+        if (positions == null || positions.isEmpty()) return List.of();
+        List<BlockHitResult> hits = new ArrayList<>(positions.size());
+        for (BlockPos raw : positions) {
+            if (raw == null) continue;
+            hits.add(new BlockHitResult(Vec3d.ofCenter(raw), Direction.UP, raw.toImmutable(), false));
+        }
+        return airInteractManyHits(hits, item);
+    }
+
+    public List<BlockPos> airInteractManyHits(List<BlockHitResult> hits, Item item) {
         if (mc.player == null || mc.world == null || mc.getNetworkHandler() == null) return List.of();
-        if (positions == null || positions.isEmpty() || item == null) return List.of();
+        if (hits == null || hits.isEmpty() || item == null) return List.of();
         if (shouldStopForEating()) return List.of();
 
         Hand useHand = null;
@@ -468,16 +482,17 @@ public final class PlacementManager {
             swapped = true;
         }
 
-        List<BlockPos> sent = new ArrayList<>(Math.min(positions.size(), allowed));
-        for (BlockPos raw : positions) {
+        List<BlockPos> sent = new ArrayList<>(Math.min(hits.size(), allowed));
+        for (BlockHitResult hit : hits) {
             if (sent.size() >= allowed || getRemainingQuota() <= 0) break;
-            if (raw == null) continue;
+            if (hit == null) continue;
 
-            BlockPos pos = raw.toImmutable();
-            if (!inPlaceRange(pos)) continue;
+            BlockPos pos = hit.getBlockPos();
+            if (pos == null) continue;
+            pos = pos.toImmutable();
+            if (!mc.world.isInBuildLimit(pos) || !inPlaceRange(pos)) continue;
 
-            BlockHitResult bhr = new BlockHitResult(Vec3d.ofCenter(pos), Direction.UP, pos, false);
-            if (!sendSequencedInteract(useHand, bhr)) break;
+            if (!sendSequencedInteract(useHand, hit)) break;
             sent.add(pos);
         }
 
