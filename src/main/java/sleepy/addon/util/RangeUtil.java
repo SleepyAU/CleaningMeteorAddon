@@ -14,10 +14,12 @@ public final class RangeUtil {
 
     public static final double MINE_RANGE      = 5.5;
     public static final double PLACE_RANGE     = 4.5;
+    public static final double ENTITY_RANGE    = 3.0;
     public static final double ATTACK_RANGE    = 3.0;
 
     public static final double MINE_RANGE_SQ   = MINE_RANGE * MINE_RANGE;
     public static final double PLACE_RANGE_SQ  = PLACE_RANGE * PLACE_RANGE;
+    public static final double ENTITY_RANGE_SQ = ENTITY_RANGE * ENTITY_RANGE;
     public static final double ATTACK_RANGE_SQ = ATTACK_RANGE * ATTACK_RANGE;
 
     /** Squared distance from a point to the closest point on a box (0 if inside). */
@@ -49,6 +51,11 @@ public final class RangeUtil {
 
     public static boolean withinPlaceRange(Vec3d eye, BlockPos pos) {
         return withinRange(eye, new Box(pos), PLACE_RANGE_SQ);
+    }
+
+    public static boolean withinEntityRange(Vec3d eye, Entity entity) {
+        if (entity == null) return false;
+        return withinRange(eye, entity.getBoundingBox(), ENTITY_RANGE_SQ);
     }
 
     public static boolean withinAttackRange(Vec3d eye, Entity entity) {
