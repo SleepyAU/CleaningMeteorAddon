@@ -5,7 +5,7 @@
   ## Modules
 
   - **AntiCheat**
-    Manages internal addon settings. Most users can leave this on default.
+    Manages internal addon settings, including AirPlace hand mode and Grim direction for mining/placement packets.
     *Note:* It effectively behaves like an always-on module, so enabling/disabling it usually doesn’t matter.
 
   - **AirPlace**
@@ -18,9 +18,17 @@
     - Automatically mine **wrong** and **extra** blocks
     - Use SilentMine for blocked paths and cleanup
 
+  - **MossPlacer**
+    Places moss on top of valid solid blocks, with optional side placement, depth control, and fading placement renders.
+
+  - **GlowBerryPlacer**
+    Places glow berries under valid overhead blocks and renders recent placements.
+
+  - **MossSpreader**
+    Bonemeals moss edges, clears blocking snow when enabled, crafts bone meal from bone blocks, and cleans junk inventory slots.
 
   - **SilentMine**
-    A packet/silent mining module for **2b2t**, designed to make mining smoother, and includes support for **Grim AntiCheat double-mine behavior** and Printer mining integration.
+    A packet/silent mining module for **2b2t**, designed to make mining smoother, with queued mining, rebreak support, instant-break handling, and Printer mining integration.
 
   - **WorldEater**
     A large-area cleaning module for removing terrain and blocks. Designed for bigger cleanup jobs where normal manual mining or small Printer cleanup is too slow.
