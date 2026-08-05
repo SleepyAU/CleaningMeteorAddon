@@ -5,6 +5,9 @@ import sleepy.addon.hud.PlaceLimit;
 import sleepy.addon.features.AntiCheat;
 import sleepy.addon.features.Airplace;
 import sleepy.addon.features.Distributer;
+import sleepy.addon.features.GlowBerryPlacer;
+import sleepy.addon.features.MossPlacer;
+import sleepy.addon.features.MossSpreader;
 import sleepy.addon.features.Printer;
 import sleepy.addon.features.SilentMine;
 import sleepy.addon.features.WorldEater;
@@ -33,6 +36,9 @@ public class SleepyAddon extends MeteorAddon {
         // Modules
         Modules.get().add(new Airplace());
         Modules.get().add(new Distributer());
+        Modules.get().add(new GlowBerryPlacer());
+        Modules.get().add(new MossPlacer());
+        Modules.get().add(new MossSpreader());
         Modules.get().add(new Printer());
         Modules.get().add(new SilentMine());
         Modules.get().add(new WorldEater());
