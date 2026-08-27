@@ -1,6 +1,7 @@
 package sleepy.addon.features;
 
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
+import meteordevelopment.meteorclient.settings.BlockListSetting;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
@@ -10,6 +11,7 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
 import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.util.math.BlockPos;
@@ -24,14 +26,17 @@ import sleepy.addon.util.PlacerQuotaCoordinator;
 import sleepy.addon.util.PlacementRenderTrail;
 import sleepy.addon.util.RangeUtil;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 public class MossPlacer extends Module {
     private static final int SEARCH_RADIUS = 5;
+    private static final int VISIBILITY_PROBE_RADIUS = 4;
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgRender = settings.createGroup("Render");
@@ -52,9 +57,31 @@ public class MossPlacer extends Module {
         .build()
     );
 
+    private final Setting<Boolean> whitelist = sgGeneral.add(new BoolSetting.Builder()
+        .name("whitelist")
+        .description("Only places moss on selected base blocks.")
+        .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<List<Block>> whitelistBlocks = sgGeneral.add(new BlockListSetting.Builder()
+        .name("whitelist-blocks")
+        .description("Base blocks MossPlacer is allowed to place on when Whitelist is enabled.")
+        .visible(whitelist::get)
+        .build()
+    );
+
     private final Setting<Boolean> ignoreSpreadable = sgGeneral.add(new BoolSetting.Builder()
         .name("ignore-spreadable")
         .description("Skips blocks in the moss-replaceable tag since bonemeal can spread moss onto them.")
+        .defaultValue(true)
+        .visible(() -> !whitelist.get())
+        .build()
+    );
+
+    private final Setting<Boolean> ignoreEnclosed = sgGeneral.add(new BoolSetting.Builder()
+        .name("ignore-enclosed")
+        .description("Skips moss placements inside sealed or very small hidden air pockets.")
         .defaultValue(true)
         .build()
     );
@@ -160,21 +187,104 @@ public class MossPlacer extends Module {
     private boolean isValidBase(BlockPos pos) {
         BlockState state = mc.world.getBlockState(pos);
         if (state.isAir() || state.isOf(Blocks.MOSS_BLOCK) || state.isReplaceable()) return false;
+        if (whitelist.get()) return whitelistBlocks.get().contains(state.getBlock());
         if (ignoreSpreadable.get() && state.isIn(BlockTags.MOSS_REPLACEABLE)) return false;
         return !state.getCollisionShape(mc.world, pos).isEmpty();
     }
 
     private boolean tryAddTarget(Set<BlockPos> targets, Vec3d eye, BlockPos targetPos) {
+        if (targets.contains(targetPos)) return true;
         if (!RangeUtil.withinPlaceRange(eye, targetPos)) return false;
 
         BlockState targetState = mc.world.getBlockState(targetPos);
         if (targetState.isOf(Blocks.MOSS_BLOCK)) return false;
+        if (ignoreEnclosed.get() && isHiddenPlacement(targetPos)) return false;
 
         PlacementManager.PlacementCheck check = PlacementManager.get().checkPlacement(targetPos, Blocks.MOSS_BLOCK);
         if (!check.placeable()) return false;
 
         targets.add(targetPos);
         return true;
+    }
+
+    private boolean isHiddenPlacement(BlockPos targetPos) {
+        if (isFullyEnclosed(targetPos)) return true;
+        return isSmallSealedAirPocket(targetPos);
+    }
+
+    private boolean isFullyEnclosed(BlockPos targetPos) {
+        for (Direction direction : Direction.values()) {
+            BlockPos neighbor = targetPos.offset(direction);
+            if (!blocksVisibility(neighbor, direction.getOpposite())) return false;
+        }
+
+        return true;
+    }
+
+    private boolean isSmallSealedAirPocket(BlockPos targetPos) {
+        if (!isVisibilitySpace(targetPos)) return false;
+
+        Set<BlockPos> visited = new HashSet<>();
+        ArrayDeque<BlockPos> open = new ArrayDeque<>();
+
+        BlockPos start = targetPos.toImmutable();
+        visited.add(start);
+        open.add(start);
+
+        while (!open.isEmpty()) {
+            BlockPos pos = open.removeFirst();
+            if (isClearlyOpen(targetPos, pos)) return false;
+
+            for (Direction direction : Direction.values()) {
+                BlockPos next = pos.offset(direction);
+                if (!withinVisibilityProbe(targetPos, next) || visited.contains(next)) continue;
+
+                BlockState nextState = mc.world.getBlockState(next);
+                if (!isVisibilitySpace(nextState)) {
+                    if (!blocksVisibility(nextState, next, direction.getOpposite())) return false;
+                    continue;
+                }
+
+                BlockPos immutableNext = next.toImmutable();
+                visited.add(immutableNext);
+                open.add(immutableNext);
+            }
+        }
+
+        return true;
+    }
+
+    private boolean isClearlyOpen(BlockPos origin, BlockPos pos) {
+        return reachesVisibilityProbeEdge(origin, pos) || mc.world.isSkyVisible(pos);
+    }
+
+    private boolean reachesVisibilityProbeEdge(BlockPos origin, BlockPos pos) {
+        return Math.abs(pos.getX() - origin.getX()) >= VISIBILITY_PROBE_RADIUS
+            || Math.abs(pos.getY() - origin.getY()) >= VISIBILITY_PROBE_RADIUS
+            || Math.abs(pos.getZ() - origin.getZ()) >= VISIBILITY_PROBE_RADIUS;
+    }
+
+    private boolean withinVisibilityProbe(BlockPos origin, BlockPos pos) {
+        return Math.abs(pos.getX() - origin.getX()) <= VISIBILITY_PROBE_RADIUS
+            && Math.abs(pos.getY() - origin.getY()) <= VISIBILITY_PROBE_RADIUS
+            && Math.abs(pos.getZ() - origin.getZ()) <= VISIBILITY_PROBE_RADIUS;
+    }
+
+    private boolean isVisibilitySpace(BlockPos pos) {
+        return isVisibilitySpace(mc.world.getBlockState(pos));
+    }
+
+    private boolean isVisibilitySpace(BlockState state) {
+        return state.isAir() || state.isReplaceable();
+    }
+
+    private boolean blocksVisibility(BlockPos pos, Direction sideTowardTarget) {
+        BlockState state = mc.world.getBlockState(pos);
+        return blocksVisibility(state, pos, sideTowardTarget);
+    }
+
+    private boolean blocksVisibility(BlockState state, BlockPos pos, Direction sideTowardTarget) {
+        return state.shouldSuffocate(mc.world, pos) && state.isSideSolidFullSquare(mc.world, pos, sideTowardTarget);
     }
 
     private boolean isSolidOccupant(BlockPos pos) {
