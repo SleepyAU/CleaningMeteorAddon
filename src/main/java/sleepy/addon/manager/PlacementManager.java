@@ -469,6 +469,14 @@ public final class PlacementManager {
             return new BlockHitResult(airPlaceHit, resolvedSide, destination, false);
         }
 
+        // Never turn an air-place packet into a real right-click on a block entity. Chests,
+        // shulkers, barrels, and similar blocks consume that click instead of placing the block.
+        // Keeping the original synthetic destination hit prevents an automated placer from
+        // repeatedly opening an adjacent container.
+        if (supportState.hasBlockEntity() || supportState.createScreenHandlerFactory(mc.world, support) != null) {
+            return new BlockHitResult(airPlaceHit, resolvedSide, destination, false);
+        }
+
         Direction destinationFace = resolvedSide.getOpposite();
         BlockHitTarget destinationHit = bestHitToBlockFace(getPlacementEye(destination), destination, destinationFace);
         Vec3d sharedFaceHit = destinationHit.hitPos().add(Vec3d.of(destinationFace.getVector()).multiply(0.001D));
