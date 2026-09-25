@@ -4,7 +4,10 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "MixinClientPlayerEntity",
-    "MixinClientConnection"
+    "MixinClientConnection",
+    "MixinAutoReplenish",
+    "MixinChestSwap",
+    "MixinInventoryTweaks"
   ],
   "injectors": {
     "defaultRequire": 1

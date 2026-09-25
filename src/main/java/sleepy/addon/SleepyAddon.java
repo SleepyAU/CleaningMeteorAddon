@@ -2,6 +2,7 @@ package sleepy.addon;
 
 import sleepy.addon.hud.InvLimit;
 import sleepy.addon.hud.PlaceLimit;
+import sleepy.addon.hud.SneakDesync;
 import sleepy.addon.features.AntiCheat;
 import sleepy.addon.features.Airplace;
 import sleepy.addon.features.Distributer;
@@ -9,6 +10,7 @@ import sleepy.addon.features.GlowBerryPlacer;
 import sleepy.addon.features.MossPlacer;
 import sleepy.addon.features.MossSpreader;
 import sleepy.addon.features.Printer;
+import sleepy.addon.features.RoofMosser;
 import sleepy.addon.features.SilentMine;
 import sleepy.addon.features.WorldEater;
 import sleepy.addon.commands.TestPlaceCommand;
@@ -22,7 +24,9 @@ import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import org.slf4j.Logger;
+import sleepy.addon.util.CursorSafeChestSwap;
 import sleepy.addon.util.SwapLimiter;
+import sleepy.addon.util.SneakDesyncTracker;
 
 public class SleepyAddon extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
@@ -40,6 +44,7 @@ public class SleepyAddon extends MeteorAddon {
         Modules.get().add(new MossPlacer());
         Modules.get().add(new MossSpreader());
         Modules.get().add(new Printer());
+        Modules.get().add(new RoofMosser());
         Modules.get().add(new SilentMine());
         Modules.get().add(new WorldEater());
         Modules.get().add(new AntiCheat());
@@ -50,10 +55,13 @@ public class SleepyAddon extends MeteorAddon {
 
         // Packet limiter
         MeteorClient.EVENT_BUS.subscribe(SwapLimiter.class);
+        MeteorClient.EVENT_BUS.subscribe(CursorSafeChestSwap.class);
+        MeteorClient.EVENT_BUS.subscribe(SneakDesyncTracker.class);
 
         // HUD
         Hud.get().register(InvLimit.INFO);
         Hud.get().register(PlaceLimit.INFO);
+        Hud.get().register(SneakDesync.INFO);
     }
 
     @Override
