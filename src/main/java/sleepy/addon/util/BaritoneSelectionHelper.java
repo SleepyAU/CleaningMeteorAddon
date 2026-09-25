@@ -12,9 +12,13 @@ public final class BaritoneSelectionHelper {
     private static boolean warnedSelectionAccessFailure;
     private static boolean warnedPathingAccessFailure;
     private static boolean warnedSettingsAccessFailure;
+    private static boolean warnedElytraAccessFailure;
     private static boolean actionsSuppressed;
+    private static boolean elytraOwned;
     private static Object savedAllowBreak;
     private static Object savedAllowPlace;
+    private static Object savedElytraAutoJump;
+    private static Object savedElytraAllowAboveBuildLimit;
     private static Boolean savedBuilderPaused;
 
     private BaritoneSelectionHelper() {
@@ -122,6 +126,29 @@ public final class BaritoneSelectionHelper {
         }
     }
 
+    /**
+     * Clears Baritone's movement inputs for the current player tick without changing its path state.
+     *
+     * PathingBehavior.requestPause() is deliberately not used here. That request is consumed only
+     * when Baritone considers the current movement safe to cancel, so a request made while walking
+     * can remain queued and pause a later tick after the caller has already released its throttle.
+     */
+    public static void suppressPathingMovementForTick() {
+        if (!isBaritonePresent()) return;
+
+        try {
+            Object baritone = getPrimaryBaritone();
+            if (baritone == null) return;
+            Object inputHandler = baritone.getClass().getMethod("getInputOverrideHandler").invoke(baritone);
+            if (inputHandler != null) inputHandler.getClass().getMethod("clearAllKeys").invoke(inputHandler);
+        } catch (Throwable throwable) {
+            if (!warnedPathingAccessFailure) {
+                warnedPathingAccessFailure = true;
+                SleepyAddon.LOG.warn("Failed to suppress Baritone movement inputs", throwable);
+            }
+        }
+    }
+
     public static boolean isPathing() {
         if (!isBaritonePresent()) return false;
 
@@ -140,6 +167,98 @@ public final class BaritoneSelectionHelper {
                 SleepyAddon.LOG.warn("Failed to read Baritone pathing state", throwable);
             }
             return false;
+        }
+    }
+
+    /**
+     * The May 2026 Elytra update added getPath() alongside Overworld/End and
+     * above-build-limit support. The older 1.14.0 release has the same version
+     * string, so API feature detection is more reliable than version parsing.
+     */
+    public static boolean isModernElytraAvailable() {
+        if (!isBaritonePresent()) return false;
+
+        try {
+            Class<?> elytraInterface = Class.forName("baritone.api.process.IElytraProcess");
+            elytraInterface.getMethod("getPath");
+            Object process = getElytraProcess();
+            if (process == null) return false;
+            Object loaded = elytraInterface.getMethod("isLoaded").invoke(process);
+            return loaded instanceof Boolean value && value;
+        } catch (NoSuchMethodException ignored) {
+            return false;
+        } catch (Throwable throwable) {
+            warnElytraFailure("Failed to inspect Baritone's Elytra process", throwable);
+            return false;
+        }
+    }
+
+    /** Starts a module-owned Elytra trip. Returns false without changing state on older Baritone builds. */
+    public static boolean startElytraPath(BlockPos target, boolean autoTakeoff) {
+        if (target == null || !isModernElytraAvailable()) return false;
+
+        try {
+            Object process = getElytraProcess();
+            if (process == null) return false;
+            saveElytraSettings();
+            setSettingValue("elytraAutoJump", autoTakeoff);
+            setSettingValue("elytraAllowAboveBuildLimit", Boolean.TRUE);
+            Class<?> elytraInterface = Class.forName("baritone.api.process.IElytraProcess");
+            elytraInterface.getMethod("pathTo", BlockPos.class).invoke(process, target);
+            elytraOwned = true;
+            return true;
+        } catch (Throwable throwable) {
+            restoreElytraSettings();
+            warnElytraFailure("Failed to start Baritone's Elytra process", throwable);
+            return false;
+        }
+    }
+
+    public static boolean isOwnedElytraActive() {
+        if (!elytraOwned) return false;
+
+        try {
+            Object process = getElytraProcess();
+            if (process == null) return false;
+            Class<?> processInterface = Class.forName("baritone.api.process.IBaritoneProcess");
+            Object active = processInterface.getMethod("isActive").invoke(process);
+            return active instanceof Boolean value && value;
+        } catch (Throwable throwable) {
+            warnElytraFailure("Failed to read Baritone's Elytra state", throwable);
+            return false;
+        }
+    }
+
+    /** True once the modern Elytra process has produced at least one path point. */
+    public static boolean isOwnedElytraPathReady() {
+        if (!elytraOwned) return false;
+
+        try {
+            Object process = getElytraProcess();
+            if (process == null) return false;
+            Class<?> elytraInterface = Class.forName("baritone.api.process.IElytraProcess");
+            Object path = elytraInterface.getMethod("getPath").invoke(process);
+            return path instanceof List<?> points && !points.isEmpty();
+        } catch (Throwable throwable) {
+            warnElytraFailure("Failed to read Baritone's Elytra path readiness", throwable);
+            return false;
+        }
+    }
+
+    public static void stopOwnedElytra() {
+        if (!elytraOwned) return;
+
+        try {
+            Object process = getElytraProcess();
+            if (process != null) {
+                Class<?> processInterface = Class.forName("baritone.api.process.IBaritoneProcess");
+                processInterface.getMethod("onLostControl").invoke(process);
+            }
+        } catch (Throwable throwable) {
+            warnElytraFailure("Failed to stop Baritone's Elytra process", throwable);
+        } finally {
+            elytraOwned = false;
+            restoreElytraSettings();
         }
     }
 
@@ -200,6 +319,40 @@ public final class BaritoneSelectionHelper {
             savedBuilderPaused = null;
             actionsSuppressed = false;
         }
+    }
+
+    private static Object getElytraProcess() throws ReflectiveOperationException {
+        Object baritone = getPrimaryBaritone();
+        return baritone == null ? null : baritone.getClass().getMethod("getElytraProcess").invoke(baritone);
+    }
+
+    private static void saveElytraSettings() throws ReflectiveOperationException {
+        if (savedElytraAutoJump == null) savedElytraAutoJump = getSettingValue("elytraAutoJump");
+        if (savedElytraAllowAboveBuildLimit == null) {
+            savedElytraAllowAboveBuildLimit = getSettingValue("elytraAllowAboveBuildLimit");
+        }
+    }
+
+    private static void restoreElytraSettings() {
+        try {
+            if (savedElytraAutoJump != null) setSettingValue("elytraAutoJump", savedElytraAutoJump);
+            if (savedElytraAllowAboveBuildLimit != null) {
+                setSettingValue("elytraAllowAboveBuildLimit", savedElytraAllowAboveBuildLimit);
+            }
+        } catch (Throwable throwable) {
+            warnElytraFailure("Failed to restore Baritone's Elytra settings", throwable);
+        } finally {
+            savedElytraAutoJump = null;
+            savedElytraAllowAboveBuildLimit = null;
+        }
+    }
+
+    private static void warnElytraFailure(String message, Throwable throwable) {
+        if (warnedElytraAccessFailure) return;
+        warnedElytraAccessFailure = true;
+        Throwable cause = throwable;
+        while (cause.getCause() != null) cause = cause.getCause();
+        SleepyAddon.LOG.warn(message, cause);
     }
 
     private static Object getPrimaryBaritone() throws ReflectiveOperationException {

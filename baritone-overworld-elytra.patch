@@ -1,0 +1,14 @@
+diff --git a/src/main/java/baritone/process/ElytraProcess.java b/src/main/java/baritone/process/ElytraProcess.java
+index 00dc834..3d35798 100644
+--- a/src/main/java/baritone/process/ElytraProcess.java
++++ b/src/main/java/baritone/process/ElytraProcess.java
+@@ -590,7 +590,8 @@ public final class ElytraProcess extends BaritoneProcessHelper implements IElytr
+                 || block == Blocks.SNOW || block == Blocks.ICE || block == Blocks.MYCELIUM || block == Blocks.PODZOL
+                 || block == Blocks.DARK_OAK_LEAVES || block == Blocks.JUNGLE_LEAVES
+                 || block == Blocks.END_STONE || block == Blocks.BEDROCK
+-                || block == Blocks.OBSIDIAN || block == Blocks.COBBLESTONE;
++                || block == Blocks.OBSIDIAN || block == Blocks.CRYING_OBSIDIAN
++                || block == Blocks.MOSS_BLOCK || block == Blocks.COBBLESTONE;
+     }
+ 
+     private boolean isSafeBlock(BlockPos pos) {
