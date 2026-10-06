@@ -435,61 +435,36 @@ public final class PlacementManager {
         }
 
         Vec3d eye = getPlacementEye(pos);
-        if (side == null) {
-            BlockHitTarget target = bestPlacementSupportHitToBlock(eye, pos);
-            return resolveRealPlacementSupport(pos, target.direction(), target.hitPos());
+        BlockHitTarget target;
+        if (side == null || isInteractableNeighbor(pos.offset(side))) {
+            target = bestSafeAirPlaceHitToBlock(eye, pos);
+        } else {
+            target = bestHitToBlockFace(eye, pos, side);
         }
-
-        BlockHitTarget target = bestHitToBlockFace(eye, pos, side);
-        return resolveRealPlacementSupport(pos, side, target.hitPos());
+        return new BlockHitResult(target.hitPos(), target.direction(), pos, false);
     }
 
     private Vec3d getPlacementEye(BlockPos pos) {
         return mc.player != null ? mc.player.getEyePos() : Vec3d.ofCenter(pos);
     }
 
-    private BlockHitResult resolveRealPlacementSupport(BlockPos destination, Direction packetSide, Vec3d airPlaceHit) {
-        Direction resolvedSide = packetSide == null ? Direction.UP : packetSide;
-        if (mc.world == null || destination == null) {
-            return new BlockHitResult(
-                airPlaceHit == null ? Vec3d.ZERO : airPlaceHit,
-                resolvedSide,
-                destination == null ? BlockPos.ORIGIN : destination,
-                false
-            );
+    private BlockHitTarget bestSafeAirPlaceHitToBlock(Vec3d eye, BlockPos pos) {
+        BlockHitTarget bestSafe = null;
+        BlockHitTarget bestAny = null;
+        for (Direction direction : Direction.values()) {
+            BlockHitTarget candidate = bestHitToBlockFace(eye, pos, direction);
+            bestAny = closerHit(bestAny, candidate);
+            if (!isInteractableNeighbor(pos.offset(direction))) {
+                bestSafe = closerHit(bestSafe, candidate);
+            }
         }
-
-        BlockPos support = destination.offset(resolvedSide.getOpposite());
-        if (!mc.world.isInBuildLimit(support)) {
-            return new BlockHitResult(airPlaceHit, resolvedSide, destination, false);
-        }
-
-        BlockState supportState = mc.world.getBlockState(support);
-        if (supportState.isAir() || supportState.isReplaceable()) {
-            return new BlockHitResult(airPlaceHit, resolvedSide, destination, false);
-        }
-
-        // Never turn an air-place packet into a real right-click on a block entity. Chests,
-        // shulkers, barrels, and similar blocks consume that click instead of placing the block.
-        // Keeping the original synthetic destination hit prevents an automated placer from
-        // repeatedly opening an adjacent container.
-        if (supportState.hasBlockEntity() || supportState.createScreenHandlerFactory(mc.world, support) != null) {
-            return new BlockHitResult(airPlaceHit, resolvedSide, destination, false);
-        }
-
-        Direction destinationFace = resolvedSide.getOpposite();
-        BlockHitTarget destinationHit = bestHitToBlockFace(getPlacementEye(destination), destination, destinationFace);
-        Vec3d sharedFaceHit = destinationHit.hitPos().add(Vec3d.of(destinationFace.getVector()).multiply(0.001D));
-        return new BlockHitResult(sharedFaceHit, resolvedSide, support, false);
+        return bestSafe != null ? bestSafe : bestAny;
     }
 
-    private BlockHitTarget bestPlacementSupportHitToBlock(Vec3d eye, BlockPos pos) {
-        BlockHitTarget nearestDestinationFace = bestHitToBlock(eye, pos);
-        return new BlockHitTarget(
-            nearestDestinationFace.direction().getOpposite(),
-            nearestDestinationFace.hitPos(),
-            nearestDestinationFace.distanceSq()
-        );
+    private boolean isInteractableNeighbor(BlockPos pos) {
+        if (mc.world == null || pos == null || !mc.world.isInBuildLimit(pos)) return false;
+        BlockState state = mc.world.getBlockState(pos);
+        return state.hasBlockEntity() || state.createScreenHandlerFactory(mc.world, pos) != null;
     }
 
     private BlockHitTarget bestHitToBlock(Vec3d eye, BlockPos pos) {
@@ -543,7 +518,9 @@ public final class PlacementManager {
                                      double maxX, double maxY, double maxZ,
                                      Direction side) {
         Direction resolvedSide = side == null ? Direction.UP : side;
-        double inset = 0.001D;
+        // Keep the synthetic hit decisively inside the empty destination block. A hit on the
+        // shared boundary can be reconstructed by Grim as a click on an adjacent container.
+        double inset = 0.05D;
         double clampInset = 0.05D;
         double hitX;
         double hitY;
