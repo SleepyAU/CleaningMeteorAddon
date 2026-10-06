@@ -674,8 +674,7 @@ public final class RoofMosser extends Module {
         if (quota <= 0) return;
         List<BlockPos> targets = collectLocalTargets(quota);
         if (targets.isEmpty()) return;
-        // Anchor only to the block directly below. PlacementManager keeps this synthetic when
-        // that block is a container, preventing adjacent or underlying containers from opening.
+        // Keep the UP-facing airplace hit inside the destination, away from anything below it.
         List<BlockPos> placed = PlacementManager.get().placeMany(targets, Blocks.MOSS_BLOCK, Direction.UP);
         if (!placed.isEmpty()) lastPlacementMs = System.currentTimeMillis();
     }
